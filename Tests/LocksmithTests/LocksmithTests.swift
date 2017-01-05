@@ -36,7 +36,7 @@ class LocksmithTests: XCTestCase {
         let data = ["some": "data"]
         try! Locksmith.saveData(data: data, forUserAccount: userAccount, inService: service)
         
-        let loaded = Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)! as! TestingDictionaryType
+        let loaded = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)!) as! TestingDictionaryType
         XCTAssertEqual(loaded, data)
         
         try! Locksmith.deleteDataForUserAccount(userAccount: userAccount, inService: service)
@@ -44,20 +44,20 @@ class LocksmithTests: XCTestCase {
         let otherData: TestingDictionaryType = ["something": "way different"]
         try! Locksmith.saveData(data: otherData, forUserAccount: userAccount, inService: service)
         
-        let loadedAgain = Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)! as! TestingDictionaryType
+        let loadedAgain = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)!) as! TestingDictionaryType
         XCTAssertEqual(loadedAgain, otherData)
         
         let updatedData = ["this update": "brings the ruckus"]
         try! Locksmith.updateData(data: updatedData, forUserAccount: userAccount, inService: service)
         
-        let loaded3 = Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)! as! TestingDictionaryType
+        let loaded3 = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)!) as! TestingDictionaryType
         
         XCTAssertEqual(loaded3, updatedData)
         
         try! Locksmith.deleteDataForUserAccount(userAccount: userAccount, inService: service)
         
         try! Locksmith.updateData(data: ["some update": "data"], forUserAccount: userAccount, inService: service)
-        let updateResult = Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)! as! [String: String]
+        let updateResult = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount, inService: service)!) as! TestingDictionaryType
         XCTAssertEqual(updateResult, ["some update": "data"])
     }
     
@@ -65,30 +65,37 @@ class LocksmithTests: XCTestCase {
         let data = ["some": "data"]
         try! Locksmith.saveData(data: data, forUserAccount: userAccount)
         
-        let loaded = Locksmith.loadDataForUserAccount(userAccount: userAccount)! as! TestingDictionaryType
+        let loaded = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount)!) as! TestingDictionaryType
         XCTAssertEqual(loaded, data)
         
         try! Locksmith.deleteDataForUserAccount(userAccount: userAccount)
         
         let otherData: TestingDictionaryType = ["something": "way different"]
         try! Locksmith.saveData(data: otherData, forUserAccount: userAccount)
-        
-        let loadedAgain = Locksmith.loadDataForUserAccount(userAccount: userAccount)! as! TestingDictionaryType
+
+        let loadedAgain = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount)!) as! TestingDictionaryType
+
         XCTAssertEqual(loadedAgain, otherData)
         
         let updatedData = ["this update": "brings the ruckus"]
         try! Locksmith.updateData(data: updatedData, forUserAccount: userAccount)
         
-        let loaded3 = Locksmith.loadDataForUserAccount(userAccount: userAccount)! as! TestingDictionaryType
-        
+        let loaded3 = NSKeyedUnarchiver.unarchiveObject(with: Locksmith.loadDataForUserAccount(userAccount: userAccount)!) as! TestingDictionaryType
+
         XCTAssertEqual(loaded3, updatedData)
     }
     
     func createGenericPasswordWithData(_ data: [String: Any]) {
         struct CreateGenericPassword: CreateableSecureStorable, GenericPasswordSecureStorable {
-            let data: [String: Any]
+            let data: Data
             let account: String
             let service: String
+
+            init(data: [String: Any], account: String, service: String) {
+                self.data = NSKeyedArchiver.archivedData(withRootObject: data)
+                self.account = account
+                self.service = service
+            }
         }
         
         let create = CreateGenericPassword(data: data, account: userAccount, service: service)
@@ -104,15 +111,21 @@ class LocksmithTests: XCTestCase {
         let data = ["some": "data"]
         
         struct CreateGenericPassword: CreateableSecureStorable, GenericPasswordSecureStorable, ReadableSecureStorable {
-            var data: [String: Any]
+            let data: Data
             let account: String
             let service: String
+
+            init(data: [String: Any], account: String, service: String) {
+                self.data = NSKeyedArchiver.archivedData(withRootObject: data)
+                self.account = account
+                self.service = service
+            }
         }
         
         let update = CreateGenericPassword(data: data, account: userAccount, service: service)
         try! update.updateInSecureStore()
         
-        let read = update.readFromSecureStore()!.data as! [String: String]
+        let read = NSKeyedUnarchiver.unarchiveObject(with: update.readFromSecureStore()!.data!) as! [String: String]
         XCTAssertEqual(read, ["some": "data"])
     }
     
@@ -120,17 +133,20 @@ class LocksmithTests: XCTestCase {
         let data = ["some": "data"]
         
         struct CreateGenericPassword: CreateableSecureStorable, GenericPasswordSecureStorable, ReadableSecureStorable {
-            var data: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
+            var dataObject: [String: Any]
             let account: String
             let service: String
         }
         
-        var create = CreateGenericPassword(data: data, account: userAccount, service: service)
+        var create = CreateGenericPassword(dataObject: data, account: userAccount, service: service)
         try! create.createInSecureStore() // make sure it doesn't throw
-        create.data = ["other": "data"]
+        create.dataObject = ["other": "data"]
         try! create.updateInSecureStore()
         
-        let read = create.readFromSecureStore()!.data as! [String: String]
+        let read = NSKeyedUnarchiver.unarchiveObject(with: create.readFromSecureStore()!.data!) as! [String: String]
         XCTAssertEqual(read, ["other": "data"])
     }
     
@@ -144,7 +160,7 @@ class LocksmithTests: XCTestCase {
         }
         
         let read = ReadGenericPassword(account: userAccount, service: service)
-        let actual = read.readFromSecureStore()!.data as! TestingDictionaryType
+        let actual = NSKeyedUnarchiver.unarchiveObject(with: read.readFromSecureStore()!.data!) as! TestingDictionaryType
         XCTAssertEqual(actual, data)
     }
     
@@ -169,16 +185,19 @@ class LocksmithTests: XCTestCase {
         struct Omnivore: ReadableSecureStorable, CreateableSecureStorable, DeleteableSecureStorable, GenericPasswordSecureStorable {
             let account: String
             let service: String
-            let data: [String: Any]
+            let dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
         }
         
         let data: [String: String] = ["something": "else"]
-        let omni = Omnivore(account: userAccount, service: service, data: data)
+        let omni = Omnivore(account: userAccount, service: service, dataObject: data)
         
         try! omni.createInSecureStore()
         
         let result = omni.readFromSecureStore()
-        let resultData = result?.data as! [String: String]
+        let resultData = NSKeyedUnarchiver.unarchiveObject(with: result!.data!) as! [String: String]
 
         XCTAssertEqual(result?.account, userAccount)
         XCTAssertEqual(result?.service, service)
@@ -199,7 +218,10 @@ class LocksmithTests: XCTestCase {
         struct Create : CreateableSecureStorable, InternetPasswordSecureStorable {
             let account: String
             let server: String
-            let data: [String: Any]
+            let dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
             let port: Int
             let internetProtocol: LocksmithInternetProtocol
             let authenticationType: LocksmithInternetAuthenticationType
@@ -227,7 +249,7 @@ class LocksmithTests: XCTestCase {
             let authenticationType: LocksmithInternetAuthenticationType
         }
         
-        let c = Create(account: userAccount, server: server, data: initialData, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType)
+        let c = Create(account: userAccount, server: server, dataObject: initialData, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType)
         try! c.createInSecureStore()
         let r1 = Read(account: userAccount, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType)
         let result1 = r1.readFromSecureStore()
@@ -247,14 +269,17 @@ class LocksmithTests: XCTestCase {
             let comment: String?
             let description: String?
             let creator: UInt?
-            let data: [String: Any]
+            let dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
         }
         
         let initialData = ["one": "two"]
         let creator: UInt = 5
         let comment = "this is a comment"
         let description = "this is the description"
-        let c = Create(account: userAccount, service: service, comment: comment, description: description, creator: creator, data: initialData)
+        let c = Create(account: userAccount, service: service, comment: comment, description: description, creator: creator, dataObject: initialData)
         try! c.createInSecureStore()
         
         struct Read: ReadableSecureStorable, GenericPasswordSecureStorable {
@@ -267,7 +292,7 @@ class LocksmithTests: XCTestCase {
         
         XCTAssertEqual(d?.account, userAccount)
         XCTAssertEqual(d?.service, service)
-        XCTAssertEqual(d!.data as! [String: String], initialData)
+        XCTAssertEqual(NSKeyedUnarchiver.unarchiveObject(with: d!.data!) as! [String: String], initialData)
         XCTAssertEqual(d?.creator, creator)
         XCTAssertEqual(d?.comment, comment)
         XCTAssertEqual(d?.description, description)
@@ -279,7 +304,10 @@ class LocksmithTests: XCTestCase {
     func testInternetPasswordMetaAttributesAreCreatedAndReturned() {
         struct CreateInternetPassword: CreateableSecureStorable, InternetPasswordSecureStorable {
             let account: String
-            var data: [String: Any]
+            var dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
             let server: String
             let port: Int
             let internetProtocol: LocksmithInternetProtocol
@@ -305,7 +333,7 @@ class LocksmithTests: XCTestCase {
             let authenticationType: LocksmithInternetAuthenticationType
         }
         
-        var c = CreateInternetPassword(account: userAccount, data: initialData, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType, path: path, securityDomain: securityDomain)
+        var c = CreateInternetPassword(account: userAccount, dataObject: initialData, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType, path: path, securityDomain: securityDomain)
         try! c.createInSecureStore()
 
         func assertResultMetadataIsOk(_ result: InternetPasswordSecureStorableResultType?) {
@@ -320,15 +348,15 @@ class LocksmithTests: XCTestCase {
         
         let r = ReadInternetPassword(account: userAccount, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType)
         let result = r.readFromSecureStore()
-        XCTAssertEqual(result!.data as! [String: String], initialData)
+        XCTAssertEqual(NSKeyedUnarchiver.unarchiveObject(with: result!.data!) as! [String: String], initialData)
         assertResultMetadataIsOk(result)
         
         // Assert that metadata is maintained after an update
-        c.data = ["other internet": "junk"]
+        c.dataObject = ["other internet": "junk"]
         try! c.updateInSecureStore()
         
         let result2 = r.readFromSecureStore()
-        XCTAssertEqual(result2!.data as! [String: String], ["other internet": "junk"])
+        XCTAssertEqual(NSKeyedUnarchiver.unarchiveObject(with: result2!.data!) as! [String: String], ["other internet": "junk"])
         assertResultMetadataIsOk(result2)
     }
     
@@ -343,7 +371,10 @@ class LocksmithTests: XCTestCase {
         struct CreateInternetPassword: CreateableSecureStorable, InternetPasswordSecureStorable, DeleteableSecureStorable {
             let account: String
             let service: String
-            let data: [String: Any]
+            let dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
             let server: String
             let port: Int
             let internetProtocol: LocksmithInternetProtocol
@@ -385,7 +416,7 @@ class LocksmithTests: XCTestCase {
             return errSecSuccess
         }
         
-        let create = CreateInternetPassword(account: account, service: service, data: data, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType, path: path, securityDomain: securityDomain, performCreateRequestClosure: performRequestClosure)
+        let create = CreateInternetPassword(account: account, service: service, dataObject: data, server: server, port: port, internetProtocol: internetProtocol, authenticationType: authenticationType, path: path, securityDomain: securityDomain, performCreateRequestClosure: performRequestClosure)
         do { try create.deleteFromSecureStore() } catch {}
         try! create.createInSecureStore()
         
@@ -394,7 +425,10 @@ class LocksmithTests: XCTestCase {
     
     func testGenericPasswordOptionalAttributesAreAppliedForConformingTypes() {
         struct CreateGenericPassword: CreateableSecureStorable, GenericPasswordSecureStorable {
-            let data: [String: Any]
+            let dataObject: [String: Any]
+            var data: Data {
+                return NSKeyedArchiver.archivedData(withRootObject: dataObject)
+            }
             let account: String
             let service: String
             let accessGroup: String?
@@ -457,7 +491,7 @@ class LocksmithTests: XCTestCase {
             return errSecSuccess
         }
         
-        let create: CreateGenericPassword = CreateGenericPassword(data: data, account: account, service: service, accessGroup: accessGroup, description: description, creator: creator, performCreateRequestClosure: performRequestClosure, accessible: accessible, comment: comment, type: type, isInvisible: isInvisible, isNegative: isNegative, generic: generic)
+        let create: CreateGenericPassword = CreateGenericPassword(dataObject: data, account: account, service: service, accessGroup: accessGroup, description: description, creator: creator, performCreateRequestClosure: performRequestClosure, accessible: accessible, comment: comment, type: type, isInvisible: isInvisible, isNegative: isNegative, generic: generic)
         
         try! create.createInSecureStore()
 

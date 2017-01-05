@@ -7,7 +7,7 @@ public typealias PerformRequestClosureType = (_ requestReference: CFDictionary, 
 
 // MARK: - Locksmith
 public struct Locksmith {
-    public static func loadDataForUserAccount(userAccount: String, inService service: String = LocksmithDefaultService) -> [String: Any]? {
+    public static func loadDataForUserAccount(userAccount: String, inService service: String = LocksmithDefaultService) -> Data? {
         struct ReadRequest: GenericPasswordSecureStorable, ReadableSecureStorable {
             let service: String
             let account: String
@@ -21,7 +21,13 @@ public struct Locksmith {
         struct CreateRequest: GenericPasswordSecureStorable, CreateableSecureStorable {
             let service: String
             let account: String
-            let data: [String: Any]
+            let data: Data
+
+            init(service: String, account: String, data: [String: Any]) {
+                self.service = service
+                self.account = account
+                self.data = NSKeyedArchiver.archivedData(withRootObject: data)
+            }
         }
         
         let request = CreateRequest(service: service, account: userAccount, data: data)
@@ -42,7 +48,13 @@ public struct Locksmith {
         struct UpdateRequest: GenericPasswordSecureStorable, CreateableSecureStorable {
             let service: String
             let account: String
-            let data: [String: Any]
+            let data: Data
+
+            init(service: String, account: String, data: [String: Any]) {
+                self.service = service
+                self.account = account
+                self.data = NSKeyedArchiver.archivedData(withRootObject: data)
+            }
         }
 
         let request = UpdateRequest(service: service, account: userAccount, data: data)
@@ -421,7 +433,7 @@ public protocol KeySecureStorable: SecureStorable {}
 
 /// Conformance to this protocol indicates that your type is able to be created and saved to a secure storage container.
 public protocol CreateableSecureStorable: SecureStorable {
-    var data: [String: Any] { get }
+    var data: Data { get }
     var performCreateRequestClosure: PerformRequestClosureType { get }
     func createInSecureStore() throws
     func updateInSecureStore() throws
@@ -534,7 +546,7 @@ extension CreateableSecureStorable {
 public extension CreateableSecureStorable where Self : GenericPasswordSecureStorable {
     var asCreateableSecureStoragePropertyDictionary: [String: Any] {
         var old = genericPasswordBaseStoragePropertyDictionary
-        old[String(kSecValueData)] = NSKeyedArchiver.archivedData(withRootObject: data)
+        old[String(kSecValueData)] = data
         return old
     }
 }
@@ -551,7 +563,7 @@ public extension CreateableSecureStorable where Self : GenericPasswordSecureStor
 public extension CreateableSecureStorable where Self : InternetPasswordSecureStorable {
     var asCreateableSecureStoragePropertyDictionary: [String: Any] {
         var old = internetPasswordBaseStoragePropertyDictionary
-        old[String(kSecValueData)] = NSKeyedArchiver.archivedData(withRootObject: data)
+        old[String(kSecValueData)] = data
         return old
     }
 }
@@ -608,7 +620,7 @@ public extension DeleteableSecureStorable where Self : InternetPasswordSecureSto
 // MARK: ResultTypes
 public protocol SecureStorableResultType: SecureStorable {
     var resultDictionary: [String: Any] { get }
-    var data: [String: Any]? { get }
+    var data: Data? { get }
 }
 
 struct InternetPasswordResult: InternetPasswordSecureStorableResultType {
@@ -620,11 +632,7 @@ public extension SecureStorableResultType {
         return [String: Any]()
     }
     
-    var data: [String: Any]? {
-        guard let aData = resultDictionary[String(kSecValueData)] as? NSData else {
-            return nil
-        }
-        
-        return NSKeyedUnarchiver.unarchiveObject(with: aData as Data) as? [String: Any]
+    var data: Data? {
+        return resultDictionary[String(kSecValueData)] as? Data
     }
 }
